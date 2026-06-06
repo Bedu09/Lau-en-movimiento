@@ -1,0 +1,114 @@
+@import url('https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-surface text-on-surface font-body overflow-x-hidden antialiased;
+    background-color: #131316;
+  }
+  
+  h1, h2, h3, h4, h5, h6, .font-display {
+    font-family: 'Outfit', sans-serif;
+  }
+}
+
+@layer utilities {
+  .bg-mesh {
+    background-color: #131316;
+    background-image: 
+      radial-gradient(at 10% 20%, rgba(208, 188, 255, 0.15) 0px, transparent 50%),
+      radial-gradient(at 90% 10%, rgba(68, 226, 205, 0.15) 0px, transparent 50%),
+      radial-gradient(at 50% 80%, rgba(255, 175, 211, 0.1) 0px, transparent 50%);
+    background-attachment: fixed;
+  }
+
+  .glass-card {
+    background: rgba(31, 31, 34, 0.45);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  }
+
+  .glass-panel {
+    background: rgba(27, 27, 30, 0.65);
+    backdrop-filter: blur(32px);
+    -webkit-backdrop-filter: blur(32px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .glass-card-active {
+    border: 2px solid #d0bcff;
+    box-shadow: 0 0 20px rgba(208, 188, 255, 0.25);
+  }
+
+  .glow-primary {
+    box-shadow: 0 0 15px rgba(208, 188, 255, 0.35);
+  }
+
+  .glow-secondary {
+    box-shadow: 0 0 15px rgba(68, 226, 205, 0.35);
+  }
+
+  .glow-tertiary {
+    box-shadow: 0 0 15px rgba(255, 175, 211, 0.35);
+  }
+
+  .btn-primary-glow {
+    background: linear-gradient(135deg, #d0bcff 0%, #a078ff 100%);
+    box-shadow: 0 4px 20px rgba(208, 188, 255, 0.3);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .btn-primary-glow:active {
+    transform: scale(0.96);
+    box-shadow: 0 2px 10px rgba(208, 188, 255, 0.2);
+  }
+
+  .btn-secondary-glass {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #d0bcff;
+    transition: all 0.3s ease;
+  }
+  
+  .btn-secondary-glass:active {
+    background: rgba(255, 255, 255, 0.08);
+    transform: scale(0.96);
+  }
+
+  .breathing-glow {
+    animation: breath 8s ease-in-out infinite;
+  }
+
+  @keyframes breath {
+    0%, 100% {
+      transform: scale(1);
+      opacity: 0.2;
+      filter: blur(12px);
+    }
+    50% {
+      transform: scale(1.15);
+      opacity: 0.35;
+      filter: blur(20px);
+    }
+  }
+
+  .fade-in {
+    animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
