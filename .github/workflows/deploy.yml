@@ -13,7 +13,7 @@ permissions:
 
 concurrency:
   group: "pages"
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -30,10 +30,13 @@ jobs:
           cache: 'npm'
 
       - name: Instalar dependencias
-        run: npm install
+        run: npm ci
 
       - name: Compilar para producción
         run: npm run build
+
+      - name: Configurar GitHub Pages
+        uses: actions/configure-pages@v4
 
       - name: Subir artefacto de Pages
         uses: actions/upload-pages-artifact@v3
