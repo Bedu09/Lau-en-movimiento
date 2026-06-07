@@ -18,20 +18,21 @@ export default defineConfig({
         background_color: '#131316',
         display: 'standalone',
         orientation: 'portrait',
-        start_url: '/',
+        start_url: '/Lau-en-movimiento/',
+        scope: '/Lau-en-movimiento/',
         icons: [
           {
-            src: '/pwa-192x192.png',
+            src: '/Lau-en-movimiento/pwa-192x192.png',
             sizes: '192x192',
             type: 'image/png'
           },
           {
-            src: '/pwa-512x512.png',
+            src: '/Lau-en-movimiento/pwa-512x512.png',
             sizes: '512x512',
             type: 'image/png'
           },
           {
-            src: '/pwa-512x512.png',
+            src: '/Lau-en-movimiento/pwa-512x512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any maskable'
@@ -39,7 +40,9 @@ export default defineConfig({
         ]
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}']
+        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        navigateFallback: '/Lau-en-movimiento/index.html',
+        navigateFallbackAllowlist: [/^\/Lau-en-movimiento/]
       }
     })
   ]
