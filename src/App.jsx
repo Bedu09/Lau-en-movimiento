@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Award, 
   BookOpen, 
@@ -23,6 +23,12 @@ import {
 import { db } from './utils/db';
 import { audio } from './utils/audio';
 import { exercises } from './data/exercises';
+import { Capacitor } from '@capacitor/core';
+import { LocalNotifications } from '@capacitor/local-notifications';
+
+const isNative = Capacitor.getPlatform() !== 'web';
+const WORK_NOTIF_ID = 1;
+const EX_NOTIF_ID = 2;
 
 function App() {
   // Navigation State
@@ -56,168 +62,355 @@ function App() {
   // References
   const timerRef = useRef(null);
   const exerciseTimerRef = useRef(null);
+  const workEndRef = useRef(null);
+  const exerciseEndRef = useRef(null);
+  const settingsRef = useRef(settings);
+  const activeExerciseRef = useRef(null);
 
-  // Initialize DB and Check streaks on mount
-  useEffect(() => {
-    // Check if streak is broken
-    setStreak(db.getStreak());
-    // Trigger audio init on click
-    const handleFirstClick = () => {
-      audio.init();
-      document.removeEventListener('click', handleFirstClick);
-    };
-    document.addEventListener('click', handleFirstClick);
-    return () => {
-      document.removeEventListener('click', handleFirstClick);
-    };
+  // Keep refs in sync with latest state (avoids stale closures in timers)
+  useEffect(() => { settingsRef.current = settings; });
+  useEffect(() => { activeExerciseRef.current = activeExercise; });
+
+  // ---- Background execution helpers (Capacitor local notifications + timestamp timers) ----
+
+  const scheduleWorkNotification = useCallback(async (endTime) => {
+    if (!isNative) return;
+    try {
+      await LocalNotifications.schedule({
+        notifications: [{
+          id: WORK_NOTIF_ID,
+          title: 'Lau en Movimiento',
+          body: 'Terminó tu tiempo de concentración. ¡Hora de una pausa activa!',
+          schedule: { at: new Date(endTime) },
+          sound: 'default',
+          allowWhileIdle: true,
+        }],
+      });
+    } catch (e) {
+      console.warn('No se pudo programar notificación de trabajo:', e);
+    }
   }, []);
 
-  // Sync settings modifications
-  useEffect(() => {
-    db.saveSettings(settings);
-    // Reset timer to new work duration if not currently running
-    if (!isWorkTimerRunning && workTimerStatus === 'work') {
-      setWorkTimer(settings.workDuration * 60);
+  const scheduleExerciseNotification = useCallback(async (endTime, title) => {
+    if (!isNative) return;
+    try {
+      await LocalNotifications.schedule({
+        notifications: [{
+          id: EX_NOTIF_ID,
+          title: 'Lau en Movimiento',
+          body: `Ejercicio "${title}" completado. ¡Bien hecho!`,
+          schedule: { at: new Date(endTime) },
+          sound: 'default',
+          allowWhileIdle: true,
+        }],
+      });
+    } catch (e) {
+      console.warn('No se pudo programar notificación de ejercicio:', e);
     }
-  }, [settings]);
+  }, []);
 
-  // Work Timer Countdown Loop
-  useEffect(() => {
-    if (isWorkTimerRunning) {
-      timerRef.current = setInterval(() => {
-        setWorkTimer((prev) => {
-          if (prev <= 1) {
-            clearInterval(timerRef.current);
-            setIsWorkTimerRunning(false);
-            setWorkTimerStatus('break_pending');
-            
-            // Alarm & Haptic Alert
-            if (settings.soundEnabled) audio.playWorkEnded();
-            if (settings.vibrationEnabled && navigator.vibrate) {
-              navigator.vibrate([300, 150, 300]);
-            }
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else {
-      clearInterval(timerRef.current);
+  const cancelNotification = useCallback(async (id) => {
+    if (!isNative) return;
+    try {
+      const pending = await LocalNotifications.getPending();
+      const matches = pending.notifications.filter((n) => n.id === id);
+      if (matches.length > 0) {
+        await LocalNotifications.cancel({ notifications: matches });
+      }
+    } catch (e) {
+      console.warn('No se pudo cancelar notificación:', e);
     }
-    return () => clearInterval(timerRef.current);
-  }, [isWorkTimerRunning]);
+  }, []);
 
-  // Active Exercise Countdown Loop
-  useEffect(() => {
-    if (isExerciseRunning && activeExercise) {
-      exerciseTimerRef.current = setInterval(() => {
-        setExerciseTime((prev) => {
-          // Play tick in final 3 seconds
-          if (prev <= 4 && prev > 1 && settings.soundEnabled) {
-            audio.playExerciseStep();
-          }
-
-          if (prev <= 1) {
-            // Check if there are more steps
-            const totalSteps = activeExercise.instructions.length;
-            if (exerciseStepIndex < totalSteps - 1) {
-              // Advance to next step
-              setExerciseStepIndex((idx) => idx + 1);
-              // Calculate remaining time for the next step
-              const stepDuration = Math.ceil(activeExercise.duration / totalSteps);
-              if (settings.soundEnabled) audio.playClick();
-              return stepDuration;
-            } else {
-              // Exercise Completed!
-              clearInterval(exerciseTimerRef.current);
-              setIsExerciseRunning(false);
-              handleExerciseCompleted();
-              return 0;
-            }
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else {
-      clearInterval(exerciseTimerRef.current);
+  const notifyBreakTime = useCallback(() => {
+    if (isNative) return;
+    if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification('Lau en Movimiento', { body: 'Terminó tu tiempo de concentración. ¡Hora de una pausa activa!' });
+      } catch { /* ignore */ }
     }
-    return () => clearInterval(exerciseTimerRef.current);
-  }, [isExerciseRunning, activeExercise, exerciseStepIndex]);
+  }, []);
 
-  // Handle exercise completion logic
-  const handleExerciseCompleted = () => {
-    if (settings.soundEnabled) audio.playExerciseEnded();
-    if (settings.vibrationEnabled && navigator.vibrate) {
-      navigator.vibrate([500]);
-    }
+  const completeWorkTimer = useCallback(() => {
+    if (workEndRef.current === null) return;
+    workEndRef.current = null;
+    if (timerRef.current) clearInterval(timerRef.current);
+    setIsWorkTimerRunning(false);
+    setWorkTimerStatus('break_pending');
+    setWorkTimer(0);
+    db.clearWorkTimer();
+    cancelNotification(WORK_NOTIF_ID);
+    const s = settingsRef.current;
+    if (s.soundEnabled) audio.playWorkEnded();
+    if (s.vibrationEnabled && navigator.vibrate) navigator.vibrate([300, 150, 300]);
+    notifyBreakTime();
+  }, [cancelNotification, notifyBreakTime]);
 
-    // Save logs
-    db.saveLog(activeExercise.id, activeExercise.duration);
-    // Update streak
+  const showAchievementToast = useCallback((ach) => {
+    setToast(ach);
+    setTimeout(() => setToast(null), 4000);
+  }, []);
+
+  const handleExerciseCompleted = useCallback((exercise) => {
+    const ex = exercise || activeExerciseRef.current;
+    if (!ex) return;
+    const s = settingsRef.current;
+    if (s.soundEnabled) audio.playExerciseEnded();
+    if (s.vibrationEnabled && navigator.vibrate) navigator.vibrate([500]);
+
+    db.saveLog(ex.id, ex.duration);
     db.updateStreakAfterExercise();
-    
-    // Refresh states
+
     const newLogs = db.getLogs();
     const newStreak = db.getStreak();
     setLogs(newLogs);
     setStreak(newStreak);
 
-    // Reset work timer to concentration mode
-    setWorkTimer(settings.workDuration * 60);
+    setWorkTimer(s.workDuration * 60);
     setWorkTimerStatus('work');
 
-    // Check Achievements
     const newlyUnlocked = db.checkAndUnlockAchievements();
     if (newlyUnlocked.length > 0) {
       setAchievements(db.getAchievements());
-      // Show first unlocked achievement toast
       showAchievementToast(newlyUnlocked[0]);
     }
 
     setShowCompletionOverlay(true);
-  };
+  }, [showAchievementToast]);
 
-  const showAchievementToast = (ach) => {
-    setToast(ach);
-    setTimeout(() => {
-      setToast(null);
-    }, 4000);
-  };
+  // Restore timer state after the app was killed/reopened in background
+  const restoreTimerState = useCallback(() => {
+    const workState = db.getWorkTimer();
+    if (workState && workState.endTime) {
+      const remaining = Math.ceil((workState.endTime - Date.now()) / 1000);
+      if (remaining > 0) {
+        workEndRef.current = workState.endTime;
+        setWorkTimer(remaining);
+        setWorkTimerStatus('work');
+        setIsWorkTimerRunning(true);
+        db.saveWorkTimer({ endTime: workState.endTime, status: 'work' });
+        if (document.visibilityState === 'hidden') scheduleWorkNotification(workState.endTime);
+      } else {
+        workEndRef.current = workState.endTime;
+        db.clearWorkTimer();
+        completeWorkTimer();
+      }
+    }
+
+    const exState = db.getExerciseTimer();
+    if (exState && exState.endTime) {
+      const ex = exercises.find((e) => e.id === exState.exerciseId);
+      db.clearExerciseTimer();
+      if (!ex) return;
+      const remaining = Math.ceil((exState.endTime - Date.now()) / 1000);
+      if (remaining > 0) {
+        exerciseEndRef.current = exState.endTime;
+        setActiveExercise(ex);
+        activeExerciseRef.current = ex;
+        setExerciseStepIndex(exState.stepIndex || 0);
+        setExerciseTime(remaining);
+        setCurrentView('ejercicio_en_curso');
+        setIsExerciseRunning(true);
+        db.saveExerciseTimer({ endTime: exState.endTime, exerciseId: ex.id, stepIndex: exState.stepIndex || 0 });
+        if (document.visibilityState === 'hidden') scheduleExerciseNotification(exState.endTime, ex.title);
+      } else {
+        exerciseEndRef.current = exState.endTime;
+        handleExerciseCompleted(ex);
+      }
+    }
+  }, [completeWorkTimer, handleExerciseCompleted, scheduleWorkNotification, scheduleExerciseNotification]);
+
+  // Initialize DB and Check streaks on mount
+  useEffect(() => {
+    // Trigger audio init on click
+    const handleFirstClick = () => {
+      audio.init();
+      if (isNative) LocalNotifications.requestPermissions().catch(() => {});
+      document.removeEventListener('click', handleFirstClick);
+    };
+    document.addEventListener('click', handleFirstClick);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- legitima reconciliacion con estado persistido en localStorage al montar
+    restoreTimerState();
+    return () => {
+      document.removeEventListener('click', handleFirstClick);
+    };
+  }, [restoreTimerState]);
+
+  // Sync settings modifications
+  useEffect(() => {
+    db.saveSettings(settings);
+  }, [settings]);
+
+  // Reset idle timer display when the work duration changes (render-phase state adjustment)
+  const [prevWorkDuration, setPrevWorkDuration] = useState(settings.workDuration);
+  if (settings.workDuration !== prevWorkDuration) {
+    setPrevWorkDuration(settings.workDuration);
+    if (!isWorkTimerRunning && workTimerStatus === 'work') {
+      setWorkTimer(settings.workDuration * 60);
+    }
+  }
+
+  // Work Timer Countdown Loop (timestamp-based: self-corrects when throttled/backgrounded)
+  useEffect(() => {
+    if (!isWorkTimerRunning || workTimerStatus !== 'work') return;
+    const tick = () => {
+      if (!workEndRef.current) return;
+      const remaining = Math.max(0, Math.ceil((workEndRef.current - Date.now()) / 1000));
+      setWorkTimer(remaining);
+      if (remaining <= 0) {
+        completeWorkTimer();
+      }
+    };
+    timerRef.current = setInterval(tick, 1000);
+    return () => clearInterval(timerRef.current);
+  }, [isWorkTimerRunning, workTimerStatus, completeWorkTimer]);
+
+  // Active Exercise Countdown Loop (timestamp-based)
+  useEffect(() => {
+    if (!isExerciseRunning || !activeExercise) return;
+    const totalSteps = activeExercise.instructions.length;
+    const tick = () => {
+      if (!exerciseEndRef.current) return;
+      const remaining = Math.max(0, Math.ceil((exerciseEndRef.current - Date.now()) / 1000));
+      setExerciseTime(remaining);
+
+      const s = settingsRef.current;
+      if (remaining <= 4 && remaining > 1 && s.soundEnabled) {
+        audio.playExerciseStep();
+      }
+
+      if (remaining <= 0) {
+        clearInterval(exerciseTimerRef.current);
+        if (exerciseStepIndex < totalSteps - 1) {
+          setExerciseStepIndex((idx) => idx + 1);
+          const stepDuration = Math.ceil(activeExercise.duration / totalSteps);
+          exerciseEndRef.current = Date.now() + stepDuration * 1000;
+          setExerciseTime(stepDuration);
+          if (s.soundEnabled) audio.playClick();
+          db.saveExerciseTimer({ endTime: exerciseEndRef.current, exerciseId: activeExercise.id, stepIndex: exerciseStepIndex + 1 });
+          if (document.visibilityState === 'hidden') scheduleExerciseNotification(exerciseEndRef.current, activeExercise.title);
+        } else {
+          exerciseEndRef.current = null;
+          setIsExerciseRunning(false);
+          db.clearExerciseTimer();
+          cancelNotification(EX_NOTIF_ID);
+          handleExerciseCompleted(activeExercise);
+        }
+      }
+    };
+    exerciseTimerRef.current = setInterval(tick, 1000);
+    return () => clearInterval(exerciseTimerRef.current);
+  }, [isExerciseRunning, activeExercise, exerciseStepIndex, handleExerciseCompleted, scheduleExerciseNotification, cancelNotification]);
+
+  // Schedule native notifications when app goes to background, cancel when visible again
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        if (isWorkTimerRunning && workEndRef.current) scheduleWorkNotification(workEndRef.current);
+        if (isExerciseRunning && exerciseEndRef.current) scheduleExerciseNotification(exerciseEndRef.current, activeExerciseRef.current?.title);
+      } else {
+        if (isWorkTimerRunning) cancelNotification(WORK_NOTIF_ID);
+        if (isExerciseRunning) cancelNotification(EX_NOTIF_ID);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [isWorkTimerRunning, isExerciseRunning, scheduleWorkNotification, scheduleExerciseNotification, cancelNotification]);
 
   // Nav Actions
   const navigateTo = (view) => {
-    if (settings.soundEnabled) audio.playClick();
+    if (settingsRef.current.soundEnabled) audio.playClick();
     setCurrentView(view);
   };
 
+  const toggleWorkTimer = () => {
+    if (settingsRef.current.soundEnabled) audio.playClick();
+    if (isWorkTimerRunning) {
+      const remaining = workEndRef.current ? Math.max(0, Math.round((workEndRef.current - Date.now()) / 1000)) : workTimer;
+      setIsWorkTimerRunning(false);
+      setWorkTimer(remaining);
+      workEndRef.current = null;
+      db.clearWorkTimer();
+      cancelNotification(WORK_NOTIF_ID);
+    } else {
+      const durationSeconds = workTimer > 0 ? workTimer : settingsRef.current.workDuration * 60;
+      const endTime = Date.now() + durationSeconds * 1000;
+      workEndRef.current = endTime;
+      setIsWorkTimerRunning(true);
+      db.saveWorkTimer({ endTime, status: 'work' });
+      if (document.visibilityState === 'hidden') scheduleWorkNotification(endTime);
+    }
+  };
+
+  const resetWorkTimer = () => {
+    if (settingsRef.current.soundEnabled) audio.playClick();
+    setIsWorkTimerRunning(false);
+    setWorkTimer(settingsRef.current.workDuration * 60);
+    workEndRef.current = null;
+    db.clearWorkTimer();
+    cancelNotification(WORK_NOTIF_ID);
+  };
+
   const startExercise = (exercise) => {
-    if (settings.soundEnabled) audio.playClick();
+    if (settingsRef.current.soundEnabled) audio.playClick();
     setActiveExercise(exercise);
+    activeExerciseRef.current = exercise;
     setExerciseStepIndex(0);
     const stepDuration = Math.ceil(exercise.duration / exercise.instructions.length);
     setExerciseTime(stepDuration);
     setCurrentView('ejercicio_en_curso');
+    exerciseEndRef.current = Date.now() + stepDuration * 1000;
     setIsExerciseRunning(true);
+    db.saveExerciseTimer({ endTime: exerciseEndRef.current, exerciseId: exercise.id, stepIndex: 0 });
+    if (document.visibilityState === 'hidden') scheduleExerciseNotification(exerciseEndRef.current, exercise.title);
+  };
+
+  const toggleExercise = () => {
+    if (settingsRef.current.soundEnabled) audio.playClick();
+    if (isExerciseRunning) {
+      const remaining = exerciseEndRef.current ? Math.max(0, Math.round((exerciseEndRef.current - Date.now()) / 1000)) : exerciseTime;
+      setIsExerciseRunning(false);
+      setExerciseTime(remaining);
+      exerciseEndRef.current = null;
+      cancelNotification(EX_NOTIF_ID);
+    } else {
+      if (!activeExercise) return;
+      const stepDuration = Math.ceil(activeExercise.duration / activeExercise.instructions.length);
+      const duration = exerciseTime > 0 ? exerciseTime : stepDuration;
+      exerciseEndRef.current = Date.now() + duration * 1000;
+      setIsExerciseRunning(true);
+      if (document.visibilityState === 'hidden') scheduleExerciseNotification(exerciseEndRef.current, activeExercise.title);
+    }
   };
 
   const handleSkipStep = () => {
-    if (settings.soundEnabled) audio.playClick();
+    if (settingsRef.current.soundEnabled) audio.playClick();
     const totalSteps = activeExercise.instructions.length;
     if (exerciseStepIndex < totalSteps - 1) {
-      setExerciseStepIndex(idx => idx + 1);
+      const newIdx = exerciseStepIndex + 1;
+      setExerciseStepIndex(newIdx);
       const stepDuration = Math.ceil(activeExercise.duration / totalSteps);
       setExerciseTime(stepDuration);
+      exerciseEndRef.current = Date.now() + stepDuration * 1000;
+      db.saveExerciseTimer({ endTime: exerciseEndRef.current, exerciseId: activeExercise.id, stepIndex: newIdx });
+      if (document.visibilityState === 'hidden') scheduleExerciseNotification(exerciseEndRef.current, activeExercise.title);
     } else {
-      // Completed early
       setIsExerciseRunning(false);
-      handleExerciseCompleted();
+      exerciseEndRef.current = null;
+      db.clearExerciseTimer();
+      cancelNotification(EX_NOTIF_ID);
+      handleExerciseCompleted(activeExercise);
     }
   };
 
   const handleStopExercise = () => {
-    if (settings.soundEnabled) audio.playClick();
+    if (settingsRef.current.soundEnabled) audio.playClick();
     setIsExerciseRunning(false);
+    exerciseEndRef.current = null;
+    db.clearExerciseTimer();
+    cancelNotification(EX_NOTIF_ID);
     setActiveExercise(null);
+    activeExerciseRef.current = null;
     navigateTo('dashboard');
   };
 
@@ -450,10 +643,7 @@ function App() {
                 ) : (
                   <>
                     <button 
-                      onClick={() => {
-                        if (settings.soundEnabled) audio.playClick();
-                        setIsWorkTimerRunning(!isWorkTimerRunning);
-                      }}
+                      onClick={toggleWorkTimer}
                       className={`w-14 h-14 rounded-full flex items-center justify-center border text-white transition-all ${
                         isWorkTimerRunning ? 'bg-white/5 border-white/20' : 'btn-primary-glow text-black border-transparent'
                       }`}
@@ -462,11 +652,7 @@ function App() {
                     </button>
                     
                     <button 
-                      onClick={() => {
-                        if (settings.soundEnabled) audio.playClick();
-                        setIsWorkTimerRunning(false);
-                        setWorkTimer(settings.workDuration * 60);
-                      }}
+                      onClick={resetWorkTimer}
                       className="w-14 h-14 rounded-full flex items-center justify-center glass-card text-on-surface-variant hover:text-white"
                     >
                       <RotateCcw size={20} />
@@ -693,10 +879,7 @@ function App() {
               </button>
 
               <button 
-                onClick={() => {
-                  if (settings.soundEnabled) audio.playClick();
-                  setIsExerciseRunning(!isExerciseRunning);
-                }}
+                onClick={toggleExercise}
                 className={`w-18 h-18 rounded-full flex items-center justify-center border transition-all ${
                   isExerciseRunning 
                     ? 'bg-white/5 border-white/20 text-white w-18 h-18' 

@@ -88,6 +88,40 @@ export const db = {
     localStorage.setItem(STORAGE_PREFIX + 'streak', JSON.stringify(streakObj));
   },
 
+  saveWorkTimer: (state) => {
+    localStorage.setItem(STORAGE_PREFIX + 'work_timer', JSON.stringify(state));
+  },
+
+  getWorkTimer: () => {
+    try {
+      const data = localStorage.getItem(STORAGE_PREFIX + 'work_timer');
+      return data ? JSON.parse(data) : null;
+    } catch {
+      return null;
+    }
+  },
+
+  clearWorkTimer: () => {
+    localStorage.removeItem(STORAGE_PREFIX + 'work_timer');
+  },
+
+  saveExerciseTimer: (state) => {
+    localStorage.setItem(STORAGE_PREFIX + 'exercise_timer', JSON.stringify(state));
+  },
+
+  getExerciseTimer: () => {
+    try {
+      const data = localStorage.getItem(STORAGE_PREFIX + 'exercise_timer');
+      return data ? JSON.parse(data) : null;
+    } catch {
+      return null;
+    }
+  },
+
+  clearExerciseTimer: () => {
+    localStorage.removeItem(STORAGE_PREFIX + 'exercise_timer');
+  },
+
   updateStreakAfterExercise: () => {
     try {
       const streak = db.getStreak();
