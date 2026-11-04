@@ -25,10 +25,29 @@ import { audio } from './utils/audio';
 import { exercises } from './data/exercises';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { App as CapApp } from '@capacitor/app';
 
 const isNative = Capacitor.getPlatform() !== 'web';
 const WORK_NOTIF_ID = 1;
 const EX_NOTIF_ID = 2;
+const NOTIFICATION_CHANNEL_ID = 'timer_channel';
+
+// Helper to reliably get exercise steps with explicit durations
+const getExerciseSteps = (exercise) => {
+  if (!exercise) return [];
+  if (exercise.steps && exercise.steps.length > 0) {
+    return exercise.steps;
+  }
+  if (exercise.instructions && exercise.instructions.length > 0) {
+    const dur = Math.max(5, Math.ceil((exercise.duration || 30) / exercise.instructions.length));
+    return exercise.instructions.map((inst, i) => ({
+      title: `Paso ${i + 1}`,
+      duration: dur,
+      instruction: inst
+    }));
+  }
+  return [{ title: 'Ejercicio', duration: exercise.duration || 30, instruction: exercise.title }];
+};
 
 function App() {
   // Navigation State
@@ -73,39 +92,26 @@ function App() {
 
   // ---- Background execution helpers (Capacitor local notifications + timestamp timers) ----
 
-  const scheduleWorkNotification = useCallback(async (endTime) => {
+  const initNotifications = useCallback(async () => {
     if (!isNative) return;
     try {
-      await LocalNotifications.schedule({
-        notifications: [{
-          id: WORK_NOTIF_ID,
-          title: 'Lau en Movimiento',
-          body: 'Terminó tu tiempo de concentración. ¡Hora de una pausa activa!',
-          schedule: { at: new Date(endTime) },
-          sound: 'default',
-          allowWhileIdle: true,
-        }],
+      const status = await LocalNotifications.checkPermissions();
+      if (status.display !== 'granted') {
+        await LocalNotifications.requestPermissions();
+      }
+      await LocalNotifications.createChannel({
+        id: NOTIFICATION_CHANNEL_ID,
+        name: 'Alertas de Pausa Activa',
+        description: 'Avisos y alarmas cuando finaliza el tiempo de trabajo o de ejercicio',
+        importance: 5, // High importance (sonido, vibración y heads-up en pantalla bloqueada)
+        visibility: 1, // Visible en pantalla de bloqueo
+        sound: 'default',
+        vibration: true,
+        lights: true,
+        lightColor: '#22c55e',
       });
     } catch (e) {
-      console.warn('No se pudo programar notificación de trabajo:', e);
-    }
-  }, []);
-
-  const scheduleExerciseNotification = useCallback(async (endTime, title) => {
-    if (!isNative) return;
-    try {
-      await LocalNotifications.schedule({
-        notifications: [{
-          id: EX_NOTIF_ID,
-          title: 'Lau en Movimiento',
-          body: `Ejercicio "${title}" completado. ¡Bien hecho!`,
-          schedule: { at: new Date(endTime) },
-          sound: 'default',
-          allowWhileIdle: true,
-        }],
-      });
-    } catch (e) {
-      console.warn('No se pudo programar notificación de ejercicio:', e);
+      console.warn('No se pudo inicializar canal de notificaciones:', e);
     }
   }, []);
 
@@ -122,17 +128,58 @@ function App() {
     }
   }, []);
 
+  const scheduleWorkNotification = useCallback(async (endTime) => {
+    if (!isNative) return;
+    try {
+      await cancelNotification(WORK_NOTIF_ID);
+      await LocalNotifications.schedule({
+        notifications: [{
+          id: WORK_NOTIF_ID,
+          title: 'Lau en Movimiento ⏱️',
+          body: '¡Terminó tu tiempo de concentración! Es momento de tu pausa activa.',
+          schedule: { at: new Date(endTime), allowWhileIdle: true },
+          sound: 'default',
+          channelId: NOTIFICATION_CHANNEL_ID,
+          smallIcon: 'ic_launcher',
+          extra: { type: 'work' },
+        }],
+      });
+    } catch (e) {
+      console.warn('No se pudo programar notificación de trabajo:', e);
+    }
+  }, [cancelNotification]);
+
+  const scheduleExerciseNotification = useCallback(async (endTime, title) => {
+    if (!isNative) return;
+    try {
+      await cancelNotification(EX_NOTIF_ID);
+      await LocalNotifications.schedule({
+        notifications: [{
+          id: EX_NOTIF_ID,
+          title: '¡Pausa activa completada! 🎉',
+          body: `Terminaste "${title}". ¡Excelente trabajo por tu salud postural!`,
+          schedule: { at: new Date(endTime), allowWhileIdle: true },
+          sound: 'default',
+          channelId: NOTIFICATION_CHANNEL_ID,
+          smallIcon: 'ic_launcher',
+          extra: { type: 'exercise' },
+        }],
+      });
+    } catch (e) {
+      console.warn('No se pudo programar notificación de ejercicio:', e);
+    }
+  }, [cancelNotification]);
+
   const notifyBreakTime = useCallback(() => {
     if (isNative) return;
     if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
       try {
-        new Notification('Lau en Movimiento', { body: 'Terminó tu tiempo de concentración. ¡Hora de una pausa activa!' });
+        new Notification('Lau en Movimiento ⏱️', { body: 'Terminó tu tiempo de concentración. ¡Hora de una pausa activa!' });
       } catch { /* ignore */ }
     }
   }, []);
 
   const completeWorkTimer = useCallback(() => {
-    if (workEndRef.current === null) return;
     workEndRef.current = null;
     if (timerRef.current) clearInterval(timerRef.current);
     setIsWorkTimerRunning(false);
@@ -158,6 +205,11 @@ function App() {
     if (s.soundEnabled) audio.playExerciseEnded();
     if (s.vibrationEnabled && navigator.vibrate) navigator.vibrate([500]);
 
+    exerciseEndRef.current = null;
+    setIsExerciseRunning(false);
+    db.clearExerciseTimer();
+    cancelNotification(EX_NOTIF_ID);
+
     db.saveLog(ex.id, ex.duration);
     db.updateStreakAfterExercise();
 
@@ -176,9 +228,9 @@ function App() {
     }
 
     setShowCompletionOverlay(true);
-  }, [showAchievementToast]);
+  }, [showAchievementToast, cancelNotification]);
 
-  // Restore timer state after the app was killed/reopened in background
+  // Restore timer state after the app was killed/reopened or resumed from background
   const restoreTimerState = useCallback(() => {
     const workState = db.getWorkTimer();
     if (workState && workState.endTime) {
@@ -188,10 +240,8 @@ function App() {
         setWorkTimer(remaining);
         setWorkTimerStatus('work');
         setIsWorkTimerRunning(true);
-        db.saveWorkTimer({ endTime: workState.endTime, status: 'work' });
-        if (document.visibilityState === 'hidden') scheduleWorkNotification(workState.endTime);
       } else {
-        workEndRef.current = workState.endTime;
+        workEndRef.current = null;
         db.clearWorkTimer();
         completeWorkTimer();
       }
@@ -200,41 +250,109 @@ function App() {
     const exState = db.getExerciseTimer();
     if (exState && exState.endTime) {
       const ex = exercises.find((e) => e.id === exState.exerciseId);
-      db.clearExerciseTimer();
-      if (!ex) return;
-      const remaining = Math.ceil((exState.endTime - Date.now()) / 1000);
-      if (remaining > 0) {
+      if (!ex) {
+        db.clearExerciseTimer();
+        return;
+      }
+      const steps = getExerciseSteps(ex);
+      const remainingStep = Math.ceil((exState.endTime - Date.now()) / 1000);
+
+      if (remainingStep > 0) {
         exerciseEndRef.current = exState.endTime;
         setActiveExercise(ex);
         activeExerciseRef.current = ex;
         setExerciseStepIndex(exState.stepIndex || 0);
-        setExerciseTime(remaining);
+        setExerciseTime(remainingStep);
         setCurrentView('ejercicio_en_curso');
         setIsExerciseRunning(true);
-        db.saveExerciseTimer({ endTime: exState.endTime, exerciseId: ex.id, stepIndex: exState.stepIndex || 0 });
-        if (document.visibilityState === 'hidden') scheduleExerciseNotification(exState.endTime, ex.title);
       } else {
-        exerciseEndRef.current = exState.endTime;
-        handleExerciseCompleted(ex);
+        // Step finished while away. Check if subsequent steps or whole exercise finished
+        let overTime = Math.abs(remainingStep);
+        let nextIdx = (exState.stepIndex || 0) + 1;
+        let targetStep = null;
+        let targetRemaining = 0;
+
+        while (nextIdx < steps.length) {
+          const stepDur = steps[nextIdx].duration;
+          if (overTime < stepDur) {
+            targetStep = nextIdx;
+            targetRemaining = stepDur - overTime;
+            break;
+          }
+          overTime -= stepDur;
+          nextIdx++;
+        }
+
+        if (targetStep !== null) {
+          const newEndTime = Date.now() + targetRemaining * 1000;
+          exerciseEndRef.current = newEndTime;
+          setActiveExercise(ex);
+          activeExerciseRef.current = ex;
+          setExerciseStepIndex(targetStep);
+          setExerciseTime(targetRemaining);
+          setCurrentView('ejercicio_en_curso');
+          setIsExerciseRunning(true);
+          db.saveExerciseTimer({ endTime: newEndTime, exerciseId: ex.id, stepIndex: targetStep });
+        } else {
+          // Entire exercise finished while in background
+          db.clearExerciseTimer();
+          exerciseEndRef.current = null;
+          setIsExerciseRunning(false);
+          handleExerciseCompleted(ex);
+        }
       }
     }
-  }, [completeWorkTimer, handleExerciseCompleted, scheduleWorkNotification, scheduleExerciseNotification]);
+  }, [completeWorkTimer, handleExerciseCompleted]);
 
-  // Initialize DB and Check streaks on mount
+  // Screen Wake Lock API: Keep screen awake while user is actively performing an exercise
   useEffect(() => {
-    // Trigger audio init on click
+    let wakeLock = null;
+    if (isExerciseRunning && 'wakeLock' in navigator) {
+      navigator.wakeLock.request('screen')
+        .then((lock) => { wakeLock = lock; })
+        .catch(() => {});
+    }
+    return () => {
+      if (wakeLock) {
+        wakeLock.release().catch(() => {});
+      }
+    };
+  }, [isExerciseRunning]);
+
+  // Initialize DB, Notification channels and check permissions
+  useEffect(() => {
+    initNotifications();
     const handleFirstClick = () => {
       audio.init();
-      if (isNative) LocalNotifications.requestPermissions().catch(() => {});
+      initNotifications();
       document.removeEventListener('click', handleFirstClick);
     };
     document.addEventListener('click', handleFirstClick);
+
+    // Initial state restore on launch
     // eslint-disable-next-line react-hooks/set-state-in-effect -- legitima reconciliacion con estado persistido en localStorage al montar
     restoreTimerState();
+
+    // Listen for notification taps
+    let notifActionListener = null;
+    if (isNative) {
+      LocalNotifications.addListener('localNotificationActionPerformed', (notificationAction) => {
+        const extra = notificationAction?.notification?.extra;
+        if (extra?.type === 'work') {
+          setWorkTimerStatus('break_pending');
+          setWorkTimer(0);
+          setCurrentView('dashboard');
+        } else if (extra?.type === 'exercise') {
+          setShowCompletionOverlay(true);
+        }
+      }).then((l) => { notifActionListener = l; });
+    }
+
     return () => {
       document.removeEventListener('click', handleFirstClick);
+      if (notifActionListener) notifActionListener.remove();
     };
-  }, [restoreTimerState]);
+  }, [restoreTimerState, initNotifications]);
 
   // Sync settings modifications
   useEffect(() => {
@@ -265,30 +383,33 @@ function App() {
     return () => clearInterval(timerRef.current);
   }, [isWorkTimerRunning, workTimerStatus, completeWorkTimer]);
 
-  // Active Exercise Countdown Loop (timestamp-based)
+  // Active Exercise Countdown Loop (timestamp-based with accurate per-step durations)
   useEffect(() => {
     if (!isExerciseRunning || !activeExercise) return;
-    const totalSteps = activeExercise.instructions.length;
+    const steps = getExerciseSteps(activeExercise);
+    const totalSteps = steps.length;
+
     const tick = () => {
       if (!exerciseEndRef.current) return;
       const remaining = Math.max(0, Math.ceil((exerciseEndRef.current - Date.now()) / 1000));
       setExerciseTime(remaining);
 
       const s = settingsRef.current;
-      if (remaining <= 4 && remaining > 1 && s.soundEnabled) {
+      if (remaining <= 3 && remaining >= 1 && s.soundEnabled) {
         audio.playExerciseStep();
       }
 
       if (remaining <= 0) {
         clearInterval(exerciseTimerRef.current);
         if (exerciseStepIndex < totalSteps - 1) {
-          setExerciseStepIndex((idx) => idx + 1);
-          const stepDuration = Math.ceil(activeExercise.duration / totalSteps);
-          exerciseEndRef.current = Date.now() + stepDuration * 1000;
-          setExerciseTime(stepDuration);
+          const nextIdx = exerciseStepIndex + 1;
+          setExerciseStepIndex(nextIdx);
+          const nextStepDuration = steps[nextIdx].duration;
+          exerciseEndRef.current = Date.now() + nextStepDuration * 1000;
+          setExerciseTime(nextStepDuration);
           if (s.soundEnabled) audio.playClick();
-          db.saveExerciseTimer({ endTime: exerciseEndRef.current, exerciseId: activeExercise.id, stepIndex: exerciseStepIndex + 1 });
-          if (document.visibilityState === 'hidden') scheduleExerciseNotification(exerciseEndRef.current, activeExercise.title);
+          if (s.vibrationEnabled && navigator.vibrate) navigator.vibrate([150]);
+          db.saveExerciseTimer({ endTime: exerciseEndRef.current, exerciseId: activeExercise.id, stepIndex: nextIdx });
         } else {
           exerciseEndRef.current = null;
           setIsExerciseRunning(false);
@@ -300,22 +421,63 @@ function App() {
     };
     exerciseTimerRef.current = setInterval(tick, 1000);
     return () => clearInterval(exerciseTimerRef.current);
-  }, [isExerciseRunning, activeExercise, exerciseStepIndex, handleExerciseCompleted, scheduleExerciseNotification, cancelNotification]);
+  }, [isExerciseRunning, activeExercise, exerciseStepIndex, handleExerciseCompleted, cancelNotification]);
 
-  // Schedule native notifications when app goes to background, cancel when visible again
+  // Background and Screen Off Lifecycle (Capacitor App state + Visibility Change)
   useEffect(() => {
+    let appStateListener = null;
+
+    if (isNative) {
+      CapApp.addListener('appStateChange', ({ isActive }) => {
+        if (isActive) {
+          // Screen turned back on or app reopened: reconcile immediately
+          restoreTimerState();
+        } else {
+          // App minimized or screen turned off: ensure native exact notifications are armed
+          if (isWorkTimerRunning && workEndRef.current) {
+            scheduleWorkNotification(workEndRef.current);
+          }
+          if (isExerciseRunning && activeExerciseRef.current) {
+            const steps = getExerciseSteps(activeExerciseRef.current);
+            const remainingCurrent = exerciseEndRef.current ? Math.max(0, Math.ceil((exerciseEndRef.current - Date.now()) / 1000)) : 0;
+            const remainingRest = steps.slice(exerciseStepIndex + 1).reduce((sum, s) => sum + s.duration, 0);
+            const totalRemaining = remainingCurrent + remainingRest;
+            if (totalRemaining > 0) {
+              scheduleExerciseNotification(Date.now() + totalRemaining * 1000, activeExerciseRef.current.title);
+            }
+          }
+        }
+      }).then((handle) => {
+        appStateListener = handle;
+      });
+    }
+
     const onVisibility = () => {
-      if (document.visibilityState === 'hidden') {
-        if (isWorkTimerRunning && workEndRef.current) scheduleWorkNotification(workEndRef.current);
-        if (isExerciseRunning && exerciseEndRef.current) scheduleExerciseNotification(exerciseEndRef.current, activeExerciseRef.current?.title);
+      if (document.visibilityState === 'visible') {
+        restoreTimerState();
       } else {
-        if (isWorkTimerRunning) cancelNotification(WORK_NOTIF_ID);
-        if (isExerciseRunning) cancelNotification(EX_NOTIF_ID);
+        if (isWorkTimerRunning && workEndRef.current) {
+          scheduleWorkNotification(workEndRef.current);
+        }
+        if (isExerciseRunning && activeExerciseRef.current) {
+          const steps = getExerciseSteps(activeExerciseRef.current);
+          const remainingCurrent = exerciseEndRef.current ? Math.max(0, Math.ceil((exerciseEndRef.current - Date.now()) / 1000)) : 0;
+          const remainingRest = steps.slice(exerciseStepIndex + 1).reduce((sum, s) => sum + s.duration, 0);
+          const totalRemaining = remainingCurrent + remainingRest;
+          if (totalRemaining > 0) {
+            scheduleExerciseNotification(Date.now() + totalRemaining * 1000, activeExerciseRef.current.title);
+          }
+        }
       }
     };
+
     document.addEventListener('visibilitychange', onVisibility);
-    return () => document.removeEventListener('visibilitychange', onVisibility);
-  }, [isWorkTimerRunning, isExerciseRunning, scheduleWorkNotification, scheduleExerciseNotification, cancelNotification]);
+
+    return () => {
+      if (appStateListener) appStateListener.remove();
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [isWorkTimerRunning, isExerciseRunning, exerciseStepIndex, restoreTimerState, scheduleWorkNotification, scheduleExerciseNotification]);
 
   // Nav Actions
   const navigateTo = (view) => {
@@ -338,7 +500,8 @@ function App() {
       workEndRef.current = endTime;
       setIsWorkTimerRunning(true);
       db.saveWorkTimer({ endTime, status: 'work' });
-      if (document.visibilityState === 'hidden') scheduleWorkNotification(endTime);
+      // Schedule background notification immediately so it fires even if screen is locked right away
+      scheduleWorkNotification(endTime);
     }
   };
 
@@ -353,16 +516,22 @@ function App() {
 
   const startExercise = (exercise) => {
     if (settingsRef.current.soundEnabled) audio.playClick();
+    const steps = getExerciseSteps(exercise);
+    const initialStepDuration = steps[0]?.duration || 15;
+
     setActiveExercise(exercise);
     activeExerciseRef.current = exercise;
     setExerciseStepIndex(0);
-    const stepDuration = Math.ceil(exercise.duration / exercise.instructions.length);
-    setExerciseTime(stepDuration);
+    setExerciseTime(initialStepDuration);
     setCurrentView('ejercicio_en_curso');
-    exerciseEndRef.current = Date.now() + stepDuration * 1000;
+
+    const now = Date.now();
+    exerciseEndRef.current = now + initialStepDuration * 1000;
     setIsExerciseRunning(true);
     db.saveExerciseTimer({ endTime: exerciseEndRef.current, exerciseId: exercise.id, stepIndex: 0 });
-    if (document.visibilityState === 'hidden') scheduleExerciseNotification(exerciseEndRef.current, exercise.title);
+
+    const totalSeconds = steps.reduce((sum, s) => sum + s.duration, 0);
+    scheduleExerciseNotification(now + totalSeconds * 1000, exercise.title);
   };
 
   const toggleExercise = () => {
@@ -375,25 +544,32 @@ function App() {
       cancelNotification(EX_NOTIF_ID);
     } else {
       if (!activeExercise) return;
-      const stepDuration = Math.ceil(activeExercise.duration / activeExercise.instructions.length);
+      const steps = getExerciseSteps(activeExercise);
+      const stepDuration = steps[exerciseStepIndex]?.duration || 15;
       const duration = exerciseTime > 0 ? exerciseTime : stepDuration;
       exerciseEndRef.current = Date.now() + duration * 1000;
       setIsExerciseRunning(true);
-      if (document.visibilityState === 'hidden') scheduleExerciseNotification(exerciseEndRef.current, activeExercise.title);
+      db.saveExerciseTimer({ endTime: exerciseEndRef.current, exerciseId: activeExercise.id, stepIndex: exerciseStepIndex });
+
+      const remainingRest = steps.slice(exerciseStepIndex + 1).reduce((sum, s) => sum + s.duration, 0);
+      scheduleExerciseNotification(Date.now() + (duration + remainingRest) * 1000, activeExercise.title);
     }
   };
 
   const handleSkipStep = () => {
     if (settingsRef.current.soundEnabled) audio.playClick();
-    const totalSteps = activeExercise.instructions.length;
+    const steps = getExerciseSteps(activeExercise);
+    const totalSteps = steps.length;
     if (exerciseStepIndex < totalSteps - 1) {
       const newIdx = exerciseStepIndex + 1;
       setExerciseStepIndex(newIdx);
-      const stepDuration = Math.ceil(activeExercise.duration / totalSteps);
+      const stepDuration = steps[newIdx].duration;
       setExerciseTime(stepDuration);
       exerciseEndRef.current = Date.now() + stepDuration * 1000;
       db.saveExerciseTimer({ endTime: exerciseEndRef.current, exerciseId: activeExercise.id, stepIndex: newIdx });
-      if (document.visibilityState === 'hidden') scheduleExerciseNotification(exerciseEndRef.current, activeExercise.title);
+
+      const remainingRest = steps.slice(newIdx + 1).reduce((sum, s) => sum + s.duration, 0);
+      scheduleExerciseNotification(Date.now() + (stepDuration + remainingRest) * 1000, activeExercise.title);
     } else {
       setIsExerciseRunning(false);
       exerciseEndRef.current = null;
@@ -727,7 +903,7 @@ function App() {
 
             {/* Category Chips Carousel */}
             <div className="flex gap-2 overflow-x-auto pb-2 -mx-6 px-6 scrollbar-hide">
-              {['Todos', 'Cuello', 'Hombros', 'Espalda', 'Fatiga Visual', 'Muñecas', 'Respiración'].map((cat) => (
+              {['Todos', 'Cuello', 'Hombros', 'Espalda', 'Fatiga Visual', 'Muñecas', 'Respiración', 'Piernas'].map((cat) => (
                 <button
                   key={cat}
                   onClick={() => {
@@ -796,108 +972,122 @@ function App() {
         )}
 
         {/* VIEW: EJERCICIO EN CURSO */}
-        {currentView === 'ejercicio_en_curso' && activeExercise && (
-          <div className="p-6 min-h-screen flex flex-col justify-between bg-mesh text-center">
-            
-            {/* Top Bar */}
-            <div className="flex items-center justify-between">
-              <button 
-                onClick={handleStopExercise}
-                className="p-3 rounded-full glass-card text-on-surface-variant hover:text-white"
-              >
-                <ArrowLeft size={18} />
-              </button>
-              <h2 className="font-display text-lg font-bold text-white max-w-[200px] truncate">
-                {activeExercise.title}
-              </h2>
-              <div className="w-10 h-10" /> {/* Spacer */}
-            </div>
+        {currentView === 'ejercicio_en_curso' && activeExercise && (() => {
+          const currentSteps = getExerciseSteps(activeExercise);
+          const currentStep = currentSteps[exerciseStepIndex] || { title: '', instruction: activeExercise.instructions?.[exerciseStepIndex] || '', duration: 15 };
+          const totalSteps = currentSteps.length;
+          const currentStepTotal = Math.max(1, currentStep.duration || 15);
 
-            {/* Circular Timer Visual */}
-            <div className="my-auto py-8 flex flex-col items-center">
-              <div className="relative w-64 h-64 flex items-center justify-center rounded-full glass-card border-white/5 mb-8">
-                
-                {/* Background breathing pulse */}
-                {isExerciseRunning && (
-                  <div className="absolute inset-8 rounded-full bg-secondary/5 breathing-glow" />
-                )}
-                
-                {/* Circular track border SVG */}
-                <svg className="absolute w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                  <circle 
-                    cx="50" 
-                    cy="50" 
-                    r="45" 
-                    className="stroke-white/5 fill-none" 
-                    strokeWidth="3.5" 
-                  />
-                  <circle 
-                    cx="50" 
-                    cy="50" 
-                    r="45" 
-                    className="stroke-secondary fill-none transition-all duration-1000"
-                    strokeWidth="4" 
-                    strokeDasharray={2 * Math.PI * 45}
-                    strokeDashoffset={
-                      (2 * Math.PI * 45) * (1 - exerciseTime / Math.ceil(activeExercise.duration / activeExercise.instructions.length))
-                    }
-                    strokeLinecap="round"
-                  />
-                </svg>
+          return (
+            <div className="p-6 min-h-screen flex flex-col justify-between bg-mesh text-center">
+              
+              {/* Top Bar */}
+              <div className="flex items-center justify-between">
+                <button 
+                  onClick={handleStopExercise}
+                  className="p-3 rounded-full glass-card text-on-surface-variant hover:text-white"
+                >
+                  <ArrowLeft size={18} />
+                </button>
+                <h2 className="font-display text-lg font-bold text-white max-w-[200px] truncate">
+                  {activeExercise.title}
+                </h2>
+                <div className="w-10 h-10" /> {/* Spacer */}
+              </div>
 
-                {/* Text Timer */}
-                <div className="z-10 text-center flex flex-col items-center">
-                  <span className="font-display text-6xl font-black text-white tracking-tight">
-                    {exerciseTime}
+              {/* Circular Timer Visual */}
+              <div className="my-auto py-8 flex flex-col items-center">
+                <div className="relative w-64 h-64 flex items-center justify-center rounded-full glass-card border-white/5 mb-8">
+                  
+                  {/* Background breathing pulse */}
+                  {isExerciseRunning && (
+                    <div className="absolute inset-8 rounded-full bg-secondary/5 breathing-glow" />
+                  )}
+                  
+                  {/* Circular track border SVG */}
+                  <svg className="absolute w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                    <circle 
+                      cx="50" 
+                      cy="50" 
+                      r="45" 
+                      className="stroke-white/5 fill-none" 
+                      strokeWidth="3.5" 
+                    />
+                    <circle 
+                      cx="50" 
+                      cy="50" 
+                      r="45" 
+                      className="stroke-secondary fill-none transition-all duration-1000"
+                      strokeWidth="4" 
+                      strokeDasharray={2 * Math.PI * 45}
+                      strokeDashoffset={
+                        (2 * Math.PI * 45) * (1 - exerciseTime / currentStepTotal)
+                      }
+                      strokeLinecap="round"
+                    />
+                  </svg>
+
+                  {/* Text Timer */}
+                  <div className="z-10 text-center flex flex-col items-center">
+                    <span className="font-display text-6xl font-black text-white tracking-tight">
+                      {exerciseTime}
+                    </span>
+                    <span className="text-xs uppercase tracking-widest text-secondary font-display font-bold mt-1.5">
+                      Segundos
+                    </span>
+                  </div>
+                </div>
+
+                {/* Steps indicator & Title badge */}
+                <div className="flex flex-col items-center gap-1.5 mb-3">
+                  <span className="text-xs uppercase font-display font-bold tracking-widest text-secondary">
+                    Paso {exerciseStepIndex + 1} de {totalSteps}
                   </span>
-                  <span className="text-xs uppercase tracking-widest text-secondary font-display font-bold mt-1.5">
-                    Segundos
-                  </span>
+                  {currentStep.title && (
+                    <span className="px-3 py-0.5 rounded-full text-xs font-display font-bold bg-secondary/15 text-secondary border border-secondary/30">
+                      {currentStep.title} ({currentStep.duration}s)
+                    </span>
+                  )}
+                </div>
+
+                {/* Step Instruction Card */}
+                <div className="glass-card rounded-2xl p-6 w-full min-h-[120px] flex items-center justify-center border-secondary/10">
+                  <p className="text-base text-white leading-relaxed font-medium">
+                    {currentStep.instruction || activeExercise.instructions?.[exerciseStepIndex]}
+                  </p>
                 </div>
               </div>
 
-              {/* Steps indicator */}
-              <span className="text-xs uppercase font-display font-bold tracking-widest text-secondary mb-3">
-                Paso {exerciseStepIndex + 1} de {activeExercise.instructions.length}
-              </span>
+              {/* Exercise Controls */}
+              <div className="flex justify-center items-center gap-6 pb-8">
+                <button 
+                  onClick={handleStopExercise}
+                  className="w-14 h-14 rounded-full flex items-center justify-center glass-card text-red-400 hover:bg-red-500/10 border-red-500/20"
+                >
+                  <RotateCcw size={20} />
+                </button>
 
-              {/* Step Instruction Card */}
-              <div className="glass-card rounded-2xl p-6 w-full min-h-[120px] flex items-center justify-center border-secondary/10">
-                <p className="text-base text-white leading-relaxed font-medium">
-                  {activeExercise.instructions[exerciseStepIndex]}
-                </p>
+                <button 
+                  onClick={toggleExercise}
+                  className={`w-18 h-18 rounded-full flex items-center justify-center border transition-all ${
+                    isExerciseRunning 
+                      ? 'bg-white/5 border-white/20 text-white w-18 h-18' 
+                      : 'bg-secondary text-black border-transparent glow-secondary w-18 h-18'
+                  }`}
+                >
+                  {isExerciseRunning ? <Pause size={28} /> : <Play size={28} className="ml-1" />}
+                </button>
+
+                <button 
+                  onClick={handleSkipStep}
+                  className="w-14 h-14 rounded-full flex items-center justify-center glass-card text-secondary hover:bg-secondary/10 border-secondary/20"
+                >
+                  <ChevronRight size={22} />
+                </button>
               </div>
             </div>
-
-            {/* Exercise Controls */}
-            <div className="flex justify-center items-center gap-6 pb-8">
-              <button 
-                onClick={handleStopExercise}
-                className="w-14 h-14 rounded-full flex items-center justify-center glass-card text-red-400 hover:bg-red-500/10 border-red-500/20"
-              >
-                <RotateCcw size={20} />
-              </button>
-
-              <button 
-                onClick={toggleExercise}
-                className={`w-18 h-18 rounded-full flex items-center justify-center border transition-all ${
-                  isExerciseRunning 
-                    ? 'bg-white/5 border-white/20 text-white w-18 h-18' 
-                    : 'bg-secondary text-black border-transparent glow-secondary w-18 h-18'
-                }`}
-              >
-                {isExerciseRunning ? <Pause size={28} /> : <Play size={28} className="ml-1" />}
-              </button>
-
-              <button 
-                onClick={handleSkipStep}
-                className="w-14 h-14 rounded-full flex items-center justify-center glass-card text-secondary hover:bg-secondary/10 border-secondary/20"
-              >
-                <ChevronRight size={22} />
-              </button>
-            </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* VIEW: LOGROS Y ESTADISTICAS */}
         {currentView === 'logros' && (

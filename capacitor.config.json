@@ -1,5 +1,11 @@
 {
   "appId": "com.lauenmovi.app",
   "appName": "Lau en Movimiento",
-  "webDir": "dist"
+  "webDir": "dist",
+  "plugins": {
+    "LocalNotifications": {
+      "smallIcon": "ic_launcher",
+      "iconColor": "#22C55E"
+    }
+  }
 }
