@@ -730,12 +730,18 @@ function App() {
               </p>
             </div>
 
-            <button 
-              onClick={() => navigateTo('dashboard')}
-              className="w-full py-4 rounded-xl font-display font-bold text-black btn-primary-glow"
-            >
-              Comenzar Jornada
-            </button>
+            <div className="w-full flex flex-col items-center gap-3">
+              <button 
+                onClick={() => navigateTo('dashboard')}
+                className="w-full py-4 rounded-xl font-display font-bold text-black btn-primary-glow"
+              >
+                Comenzar Jornada
+              </button>
+              <div className="flex items-center justify-center gap-1.5 text-xs text-on-surface-variant/75 font-medium">
+                <Clock size={13} className="text-secondary/80" />
+                <span>Última actualización: 04/11/2026</span>
+              </div>
+            </div>
           </div>
         )}
 
@@ -1318,6 +1324,12 @@ function App() {
               >
                 Eliminar Todo el Progreso
               </button>
+            </div>
+
+            {/* App Info */}
+            <div className="text-center pt-2 pb-2 text-xs text-on-surface-variant/60">
+              <p className="font-display font-medium text-white/70">Lau en Movimiento v1.1.0</p>
+              <p className="mt-0.5">Última actualización: 04/11/2026</p>
             </div>
           </div>
         )}
