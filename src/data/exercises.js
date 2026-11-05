@@ -7,11 +7,8 @@ export const exercises = [
     equipment: "Ninguno",
     description: "Alivia la tensión muscular acumulada en el cuello y trapecios superior debido al uso prolongado de pantallas.",
     steps: [
-      { title: "Preparación", duration: 5, instruction: "Siéntate derecho con hombros relajados y suelta la tensión." },
-      { title: "Lado derecho", duration: 15, instruction: "Inclina suavemente la cabeza hacia el hombro derecho. Apoya la mano derecha sin forzar y mantén 15 segundos respirando hondo." },
-      { title: "Transición", duration: 5, instruction: "Regresa la cabeza lentamente al centro y relaja ambos hombros." },
-      { title: "Lado izquierdo", duration: 15, instruction: "Inclina suavemente la cabeza hacia el hombro izquierdo. Apoya la mano izquierda y mantén 15 segundos respirando profundo." },
-      { title: "Finalización", duration: 5, instruction: "Regresa al centro despacio, realiza una inhalación profunda y relaja la zona cervical." }
+      { title: "Lado derecho", duration: 30, instruction: "Inclina suavemente la cabeza hacia el hombro derecho. Apoya la mano derecha sin forzar y mantén la posición respirando hondo durante 30 segundos." },
+      { title: "Lado izquierdo", duration: 30, instruction: "Inclina suavemente la cabeza hacia el hombro izquierdo. Apoya la mano izquierda sin forzar y mantén durante 30 segundos respirando profundo." }
     ]
   },
   {
@@ -22,11 +19,8 @@ export const exercises = [
     equipment: "Ninguno",
     description: "Moviliza la articulación escapular y ayuda a relajar los hombros corrigiendo la postura encorvada.",
     steps: [
-      { title: "Preparación", duration: 5, instruction: "Espalda recta, brazos sueltos a los lados y cuello alineado." },
-      { title: "Giros hacia atrás", duration: 15, instruction: "Realiza círculos amplios y lentos con ambos hombros hacia atrás durante 15 segundos, sintiendo cómo se juntan los omóplatos." },
-      { title: "Pausa breve", duration: 5, instruction: "Detén el giro al centro, baja los hombros y respira profundamente." },
-      { title: "Giros hacia adelante", duration: 15, instruction: "Invierte el sentido y realiza círculos suaves hacia adelante durante otros 15 segundos." },
-      { title: "Descanso", duration: 5, instruction: "Deja caer los hombros con suavidad, sacude ligeramente las manos y relaja." }
+      { title: "Giros hacia atrás", duration: 30, instruction: "Realiza círculos amplios y lentos con ambos hombros hacia atrás durante 30 segundos, sintiendo cómo se juntan los omóplatos y baja la tensión." },
+      { title: "Giros hacia adelante", duration: 30, instruction: "Invierte el sentido y realiza círculos suaves y continuos hacia adelante durante otros 30 segundos." }
     ]
   },
   {
@@ -37,11 +31,8 @@ export const exercises = [
     equipment: "Silla",
     description: "Combate la postura encorvada abriendo la caja torácica e incrementando la capacidad respiratoria.",
     steps: [
-      { title: "Posición inicial", duration: 5, instruction: "Siéntate al borde de la silla con pies firmes en el suelo y entrelaza las manos detrás de la espalda." },
-      { title: "Apertura profunda", duration: 20, instruction: "Inhala elevando el pecho, lleva hombros hacia atrás y mantén la apertura durante 20 segundos con respiración serena." },
-      { title: "Descanso intermedio", duration: 5, instruction: "Suelta las manos suavemente, redondea la espalda hacia adelante y exhala." },
-      { title: "Segunda apertura", duration: 20, instruction: "Vuelve a abrir el pecho, proyecta el esternón hacia arriba y mantén 20 segundos respirando hondo." },
-      { title: "Cierre", duration: 5, instruction: "Regresa los brazos a los costados y descansa sintiendo el torso abierto y despejado." }
+      { title: "Apertura profunda", duration: 40, instruction: "Entrelaza las manos detrás de la espalda o sujeta el respaldo. Inhala elevando el pecho, lleva hombros hacia atrás y mantén la apertura durante 40 segundos con respiración serena." },
+      { title: "Segunda apertura", duration: 40, instruction: "Vuelve a abrir el pecho, proyecta el esternón hacia arriba, junta omóplatos y mantén durante 40 segundos respirando hondo." }
     ]
   },
   {
@@ -52,10 +43,8 @@ export const exercises = [
     equipment: "Ninguno",
     description: "Regla recomendada por oftalmólogos para relajar los músculos oculares y reducir la resequedad digital.",
     steps: [
-      { title: "Aparta la mirada", duration: 5, instruction: "Aparta por completo la vista del monitor o pantalla de tu teléfono." },
-      { title: "Enfoque lejano", duration: 20, instruction: "Fija la mirada en un objeto lejano a más de 6 metros (20 pies). Mantén la vista fija y relajada durante 20 segundos." },
-      { title: "Cierre y lubricación", duration: 10, instruction: "Cierra suavemente los ojos durante 10 segundos para hidratar la córnea y calmar la tensión." },
-      { title: "Regreso", duration: 5, instruction: "Abre los ojos despacio sintiendo tu vista renovada y descansada." }
+      { title: "Enfoque a distancia", duration: 40, instruction: "Fija la mirada en un objeto o punto a más de 6 metros (20 pies) de distancia. Mantén la vista relajada durante 40 segundos parpadeando con naturalidad." },
+      { title: "Cierre y lubricación", duration: 20, instruction: "Cierra suavemente los ojos durante 20 segundos para lubricar la córnea y calmar por completo los músculos oculares." }
     ]
   },
   {
@@ -66,11 +55,11 @@ export const exercises = [
     equipment: "Ninguno",
     description: "Ideal para prevenir el síndrome del túnel carpiano y tendinitis por tipeo prolongado y uso de ratón.",
     steps: [
-      { title: "Flexión derecha", duration: 15, instruction: "Brazo derecho al frente, dedos hacia abajo. Con la mano izquierda presiona suavemente los dedos hacia tu cuerpo durante 15 segundos." },
-      { title: "Extensión derecha", duration: 15, instruction: "Mano derecha con dedos hacia arriba y palma al frente. Presiona suavemente hacia ti durante 15 segundos." },
-      { title: "Flexión izquierda", duration: 15, instruction: "Brazo izquierdo al frente, dedos hacia abajo. Presiona con la mano derecha suavemente hacia ti durante 15 segundos." },
-      { title: "Extensión izquierda", duration: 15, instruction: "Mano izquierda con dedos hacia arriba y palma al frente. Presiona suavemente hacia atrás durante 15 segundos." },
-      { title: "Sacudida articular", duration: 10, instruction: "Sacude ambas manos y gira muñecas libremente en círculos suaves durante 10 segundos." }
+      { title: "Flexión derecha", duration: 30, instruction: "Brazo derecho al frente, dedos hacia abajo. Con la mano izquierda presiona suavemente los dedos hacia tu cuerpo durante 30 segundos." },
+      { title: "Extensión derecha", duration: 30, instruction: "Mano derecha con dedos hacia arriba y palma al frente. Presiona suavemente hacia ti durante 30 segundos." },
+      { title: "Flexión izquierda", duration: 30, instruction: "Brazo izquierdo al frente, dedos hacia abajo. Presiona con la mano derecha suavemente hacia ti durante 30 segundos." },
+      { title: "Extensión izquierda", duration: 30, instruction: "Mano izquierda con dedos hacia arriba y palma al frente. Presiona suavemente hacia atrás durante 30 segundos." },
+      { title: "Movilidad articular", duration: 20, instruction: "Gira ambas muñecas en círculos suaves y sacude las manos libremente durante 20 segundos para activar la circulación." }
     ]
   },
   {
@@ -81,20 +70,18 @@ export const exercises = [
     equipment: "Ninguno",
     description: "Técnica de respiración utilizada para regular el sistema nervioso, aliviar la ansiedad laboral y enfocar la mente.",
     steps: [
-      { title: "Preparación", duration: 4, instruction: "Siéntate cómodo, cierra los ojos y exhala todo el aire de tus pulmones." },
-      { title: "Ciclo 1: Inhala", duration: 4, instruction: "Inhala aire por la nariz lentamente: 1... 2... 3... 4." },
-      { title: "Ciclo 1: Retén", duration: 4, instruction: "Mantén el aire en los pulmones: 1... 2... 3... 4." },
-      { title: "Ciclo 1: Exhala", duration: 4, instruction: "Exhala suavemente por la boca: 1... 2... 3... 4." },
-      { title: "Ciclo 1: Pausa", duration: 4, instruction: "Permanece con pulmones vacíos en calma: 1... 2... 3... 4." },
-      { title: "Ciclo 2: Inhala", duration: 4, instruction: "Inhala profundo llenando tu abdomen: 1... 2... 3... 4." },
-      { title: "Ciclo 2: Retén", duration: 4, instruction: "Sostén con serenidad: 1... 2... 3... 4." },
-      { title: "Ciclo 2: Exhala", duration: 4, instruction: "Suelta el aire liberando tensiones: 1... 2... 3... 4." },
-      { title: "Ciclo 2: Pausa", duration: 4, instruction: "Pausa en calma sin forzar: 1... 2... 3... 4." },
-      { title: "Ciclo 3: Inhala", duration: 4, instruction: "Inhala aire fresco y renovador: 1... 2... 3... 4." },
-      { title: "Ciclo 3: Retén", duration: 4, instruction: "Mantén la quietud mental: 1... 2... 3... 4." },
-      { title: "Ciclo 3: Exhala", duration: 4, instruction: "Exhala despacio y profundo: 1... 2... 3... 4." },
-      { title: "Ciclo 3: Pausa", duration: 4, instruction: "Última pausa en tranquilidad: 1... 2... 3... 4." },
-      { title: "Regreso", duration: 8, instruction: "Abre los ojos lentamente y respira a tu ritmo natural sintiendo serenidad." }
+      { title: "Ciclo 1: Inhala", duration: 8, instruction: "Inhala aire por la nariz lentamente llenando abdomen y pecho: 1... 2... 3... 4... 5... 6... 7... 8." },
+      { title: "Ciclo 1: Retén", duration: 8, instruction: "Mantén el aire en los pulmones con serenidad: 1... 2... 3... 4... 5... 6... 7... 8." },
+      { title: "Ciclo 1: Exhala", duration: 8, instruction: "Exhala suavemente por la boca vaciando los pulmones: 1... 2... 3... 4... 5... 6... 7... 8." },
+      { title: "Ciclo 1: Pausa", duration: 8, instruction: "Permanece con pulmones vacíos en calma: 1... 2... 3... 4... 5... 6... 7... 8." },
+      { title: "Ciclo 2: Inhala", duration: 8, instruction: "Inhala profundo renovando tu energía: 1... 2... 3... 4... 5... 6... 7... 8." },
+      { title: "Ciclo 2: Retén", duration: 8, instruction: "Sostén con calma y quietud mental: 1... 2... 3... 4... 5... 6... 7... 8." },
+      { title: "Ciclo 2: Exhala", duration: 8, instruction: "Suelta el aire liberando cualquier tensión: 1... 2... 3... 4... 5... 6... 7... 8." },
+      { title: "Ciclo 2: Pausa", duration: 8, instruction: "Pausa en calma con serenidad: 1... 2... 3... 4... 5... 6... 7... 8." },
+      { title: "Ciclo 3: Inhala", duration: 8, instruction: "Inhala aire fresco y revitalizante: 1... 2... 3... 4... 5... 6... 7... 8." },
+      { title: "Ciclo 3: Retén", duration: 8, instruction: "Mantén la tranquilidad interior: 1... 2... 3... 4... 5... 6... 7... 8." },
+      { title: "Ciclo 3: Exhala", duration: 8, instruction: "Exhala despacio y profundo: 1... 2... 3... 4... 5... 6... 7... 8." },
+      { title: "Ciclo 3: Pausa", duration: 8, instruction: "Última pausa en total calma: 1... 2... 3... 4... 5... 6... 7... 8." }
     ]
   },
   {
@@ -105,11 +92,8 @@ export const exercises = [
     equipment: "Silla",
     description: "Descomprime las vértebras y estira la musculatura paravertebral dorsolumbar tras períodos sentado.",
     steps: [
-      { title: "Preparación", duration: 5, instruction: "Siéntate erguido con los pies firmes y las rodillas juntas." },
-      { title: "Torsión derecha", duration: 15, instruction: "Gira el tronco hacia la derecha sujetando el respaldo de la silla. Mantén 15 segundos respirando lento." },
-      { title: "Centro", duration: 5, instruction: "Regresa suavemente al centro, alarga la columna e inhala profundo." },
-      { title: "Torsión izquierda", duration: 15, instruction: "Gira el tronco hacia la izquierda sujetando la silla. Mantén 15 segundos sintiendo el estiramiento." },
-      { title: "Cierre", duration: 5, instruction: "Regresa al centro despacio, relaja los hombros y apoya la espalda recta." }
+      { title: "Torsión derecha", duration: 30, instruction: "Gira el tronco hacia la derecha sujetando el respaldo de la silla. Mantén la postura durante 30 segundos con respiración lenta y constante." },
+      { title: "Torsión izquierda", duration: 30, instruction: "Gira el tronco hacia la izquierda sujetando la silla. Mantén 30 segundos sintiendo el estiramiento profundo en la columna." }
     ]
   },
   {
@@ -120,10 +104,10 @@ export const exercises = [
     equipment: "Silla",
     description: "Estimula el retorno venoso, alivia la pesadez en las piernas y despierta la circulación.",
     steps: [
-      { title: "Bombeo de talones", duration: 15, instruction: "Con los pies en el suelo, sube y baja los talones de manera rítmica durante 15 segundos apoyando las puntas." },
-      { title: "Círculos tobillo derecho", duration: 10, instruction: "Eleva levemente el pie derecho y gira el tobillo en círculos amplios durante 10 segundos." },
-      { title: "Círculos tobillo izquierdo", duration: 10, instruction: "Eleva el pie izquierdo y realiza giros suaves de tobillo durante 10 segundos." },
-      { title: "Extensión activa", duration: 10, instruction: "Extiende ambas piernas al frente manteniendo los pies suspendidos 10 segundos para activar muslos y rodillas." }
+      { title: "Bombeo de talones", duration: 30, instruction: "Con los pies en el suelo, sube y baja los talones de manera rítmica durante 30 segundos apoyando las puntas para activar pantorrillas." },
+      { title: "Círculos tobillo derecho", duration: 20, instruction: "Eleva levemente el pie derecho y realiza giros circulares continuos durante 20 segundos." },
+      { title: "Círculos tobillo izquierdo", duration: 20, instruction: "Eleva el pie izquierdo y realiza giros continuos de tobillo durante 20 segundos." },
+      { title: "Extensión activa", duration: 20, instruction: "Extiende ambas piernas al frente manteniendo los pies suspendidos 20 segundos para activar muslos y rodillas." }
     ]
   }
 ].map((ex) => {

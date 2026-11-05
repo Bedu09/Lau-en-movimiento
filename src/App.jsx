@@ -517,7 +517,7 @@ function App() {
   const startExercise = (exercise) => {
     if (settingsRef.current.soundEnabled) audio.playClick();
     const steps = getExerciseSteps(exercise);
-    const initialStepDuration = steps[0]?.duration || 15;
+    const initialStepDuration = steps[0]?.duration || 30;
 
     setActiveExercise(exercise);
     activeExerciseRef.current = exercise;
@@ -525,13 +525,11 @@ function App() {
     setExerciseTime(initialStepDuration);
     setCurrentView('ejercicio_en_curso');
 
-    const now = Date.now();
-    exerciseEndRef.current = now + initialStepDuration * 1000;
-    setIsExerciseRunning(true);
-    db.saveExerciseTimer({ endTime: exerciseEndRef.current, exerciseId: exercise.id, stepIndex: 0 });
-
-    const totalSeconds = steps.reduce((sum, s) => sum + s.duration, 0);
-    scheduleExerciseNotification(now + totalSeconds * 1000, exercise.title);
+    // No iniciar automáticamente: esperar a que el usuario presione Play
+    setIsExerciseRunning(false);
+    exerciseEndRef.current = null;
+    db.clearExerciseTimer();
+    cancelNotification(EX_NOTIF_ID);
   };
 
   const toggleExercise = () => {
@@ -541,18 +539,20 @@ function App() {
       setIsExerciseRunning(false);
       setExerciseTime(remaining);
       exerciseEndRef.current = null;
+      db.clearExerciseTimer();
       cancelNotification(EX_NOTIF_ID);
     } else {
       if (!activeExercise) return;
       const steps = getExerciseSteps(activeExercise);
-      const stepDuration = steps[exerciseStepIndex]?.duration || 15;
+      const stepDuration = steps[exerciseStepIndex]?.duration || 30;
       const duration = exerciseTime > 0 ? exerciseTime : stepDuration;
-      exerciseEndRef.current = Date.now() + duration * 1000;
+      const now = Date.now();
+      exerciseEndRef.current = now + duration * 1000;
       setIsExerciseRunning(true);
       db.saveExerciseTimer({ endTime: exerciseEndRef.current, exerciseId: activeExercise.id, stepIndex: exerciseStepIndex });
 
       const remainingRest = steps.slice(exerciseStepIndex + 1).reduce((sum, s) => sum + s.duration, 0);
-      scheduleExerciseNotification(Date.now() + (duration + remainingRest) * 1000, activeExercise.title);
+      scheduleExerciseNotification(now + (duration + remainingRest) * 1000, activeExercise.title);
     }
   };
 
@@ -565,11 +565,18 @@ function App() {
       setExerciseStepIndex(newIdx);
       const stepDuration = steps[newIdx].duration;
       setExerciseTime(stepDuration);
-      exerciseEndRef.current = Date.now() + stepDuration * 1000;
-      db.saveExerciseTimer({ endTime: exerciseEndRef.current, exerciseId: activeExercise.id, stepIndex: newIdx });
 
-      const remainingRest = steps.slice(newIdx + 1).reduce((sum, s) => sum + s.duration, 0);
-      scheduleExerciseNotification(Date.now() + (stepDuration + remainingRest) * 1000, activeExercise.title);
+      if (isExerciseRunning) {
+        const now = Date.now();
+        exerciseEndRef.current = now + stepDuration * 1000;
+        db.saveExerciseTimer({ endTime: exerciseEndRef.current, exerciseId: activeExercise.id, stepIndex: newIdx });
+        const remainingRest = steps.slice(newIdx + 1).reduce((sum, s) => sum + s.duration, 0);
+        scheduleExerciseNotification(now + (stepDuration + remainingRest) * 1000, activeExercise.title);
+      } else {
+        exerciseEndRef.current = null;
+        db.clearExerciseTimer();
+        cancelNotification(EX_NOTIF_ID);
+      }
     } else {
       setIsExerciseRunning(false);
       exerciseEndRef.current = null;
@@ -1065,31 +1072,41 @@ function App() {
               </div>
 
               {/* Exercise Controls */}
-              <div className="flex justify-center items-center gap-6 pb-8">
-                <button 
-                  onClick={handleStopExercise}
-                  className="w-14 h-14 rounded-full flex items-center justify-center glass-card text-red-400 hover:bg-red-500/10 border-red-500/20"
-                >
-                  <RotateCcw size={20} />
-                </button>
+              <div className="flex flex-col items-center gap-3 pb-8">
+                <div className="flex justify-center items-center gap-6">
+                  <button 
+                    onClick={handleStopExercise}
+                    className="w-14 h-14 rounded-full flex items-center justify-center glass-card text-red-400 hover:bg-red-500/10 border-red-500/20"
+                    title="Salir"
+                  >
+                    <RotateCcw size={20} />
+                  </button>
 
-                <button 
-                  onClick={toggleExercise}
-                  className={`w-18 h-18 rounded-full flex items-center justify-center border transition-all ${
-                    isExerciseRunning 
-                      ? 'bg-white/5 border-white/20 text-white w-18 h-18' 
-                      : 'bg-secondary text-black border-transparent glow-secondary w-18 h-18'
-                  }`}
-                >
-                  {isExerciseRunning ? <Pause size={28} /> : <Play size={28} className="ml-1" />}
-                </button>
+                  <button 
+                    onClick={toggleExercise}
+                    className={`w-18 h-18 rounded-full flex items-center justify-center border transition-all ${
+                      isExerciseRunning 
+                        ? 'bg-white/5 border-white/20 text-white w-18 h-18' 
+                        : 'bg-secondary text-black border-transparent glow-secondary w-18 h-18 scale-105'
+                    }`}
+                    title={isExerciseRunning ? 'Pausar' : 'Comenzar'}
+                  >
+                    {isExerciseRunning ? <Pause size={28} /> : <Play size={28} className="ml-1" />}
+                  </button>
 
-                <button 
-                  onClick={handleSkipStep}
-                  className="w-14 h-14 rounded-full flex items-center justify-center glass-card text-secondary hover:bg-secondary/10 border-secondary/20"
-                >
-                  <ChevronRight size={22} />
-                </button>
+                  <button 
+                    onClick={handleSkipStep}
+                    className="w-14 h-14 rounded-full flex items-center justify-center glass-card text-secondary hover:bg-secondary/10 border-secondary/20"
+                    title="Siguiente paso"
+                  >
+                    <ChevronRight size={22} />
+                  </button>
+                </div>
+                {!isExerciseRunning && (
+                  <span className="text-xs font-display font-semibold text-secondary/90 animate-pulse">
+                    Presioná Play para comenzar
+                  </span>
+                )}
               </div>
             </div>
           );
